@@ -233,71 +233,61 @@
             // Replace with your deployed web app URL
             return 'https://script.google.com/macros/s/AKfycbwyoxMsAzH0ICzweGGMVM0bfH0170r6LNkkKlnqN_h_KAEuEM_DW8q7bCyG6_dvLVf92A/exec';
         }  */
-        document.getElementById('loginForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const errorElement = document.getElementById('loginError');
-    errorElement.textContent = '';
-    
-    // Show loading state
-    const submitBtn = e.target.querySelector('button[type="submit"]');
-    const originalBtnText = submitBtn.innerHTML;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
-    submitBtn.disabled = true;
+     // PASTE YOUR DEPLOYED APPS SCRIPT URL HERE (replace the example)
+const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwyoxMsAzH0ICzweGGMVM0bfH0170r6LNkkKlnqN_h_KAEuEM_DW8q7bCyG6_dvLVf92A/exec";
 
-    try {
-        // Use a proxy if needed (see Step 4 below)
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwyoxMsAzH0ICzweGGMVM0bfH0170r6LNkkKlnqN_h_KAEuEM_DW8q7bCyG6_dvLVf92A/exec';
-        
-        
-        // First make a GET request to trigger authorization
-        await fetch(`${SCRIPT_URL}?dummy=1`, {
-            method: 'GET',
-            redirect: 'follow'
-        });
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const errorElement = document.getElementById('loginError');
+  const submitBtn = e.target.querySelector('button[type="submit"]');
 
-        // Then make the POST request
-        const response = await fetch(SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                action: 'login',
-                email: email,
-                password: password
-            }),
-            redirect: 'follow'
-        });
+  // Show loading state
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
 
-        // Handle potential redirect
-        const result = await response.json();
-        
-        if (result.success) {
-            localStorage.setItem('authToken', result.token);
-            localStorage.setItem('userRole', result.role);
-            localStorage.setItem('userName', result.name);
-            localStorage.setItem('userId', result.userId);
-            
-            if (result.role === 'admin') {
-                window.location.href = 'admin.html';
-            } else {
-                window.location.href = 'exam.html';
-            }
-        } else {
-            errorElement.textContent = result.message || 'Invalid credentials';
-        }
-    } catch (error) {
-        console.error('Login error:', error);
-        errorElement.textContent = 'Network error. Please try again later.';
-        // Additional error details for debugging:
-        errorElement.textContent += ` (${error.message})`;
-    } finally {
-        submitBtn.innerHTML = originalBtnText;
-        submitBtn.disabled = false;
+  try {
+    // Step 1: First make a GET request to trigger authorization
+    await fetch(`${APP_SCRIPT_URL}?dummy=1`, { 
+      method: 'GET',
+      redirect: 'follow'
+    });
+
+    // Step 2: Make the actual login request
+    const response = await fetch(APP_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'login',
+        email: email,
+        password: password
+      }),
+      redirect: 'follow'
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      // Store user data
+      localStorage.setItem('authToken', result.token);
+      localStorage.setItem('userRole', result.role);
+      localStorage.setItem('userName', result.name || 'User');
+      
+      // Redirect
+      window.location.href = result.role === 'admin' ? 'admin.html' : 'exam.html';
+    } else {
+      errorElement.textContent = result.message || 'Login failed';
     }
+  } catch (error) {
+    console.error('Login error:', error);
+    errorElement.textContent = 'Network error. Please try again.';
+  } finally {
+    // Restore button
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'Login';
+  }
 });
     </script>
 </body>
