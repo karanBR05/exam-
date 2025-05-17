@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Portal - Exam</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Your existing CSS styles remain unchanged */
+        /* ... (keep all your existing styles) ... */
+    </style>
+</head>
+
+<body>
+    <!-- Your existing HTML structure remains unchanged -->
+    <!-- ... (keep all your existing HTML) ... -->
+
+    <script>
+        // Current question state
+        let currentQuestionIndex = 0;
+        let examQuestions = [];
+        let userAnswers = {};
+        let examDuration = 45; // minutes
+        let timeRemaining = examDuration * 60;
+        let timerInterval;
+
+        // Authentication check
+        document.addEventListener('DOMContentLoaded', async function () {
+            // Check if user is logged in
+            const authToken = localStorage.getItem('authToken');
+            const userRole = localStorage.getItem('userRole');
+
+            if (!authToken || userRole !== 'student') {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // Load user data
+            const userName = localStorage.getItem('userName') || 'Student';
+            const userId = localStorage.getItem('userId') || 'STU000';
+
+            document.getElementById('studentName').textContent = userName;
+            document.getElementById('studentId').textContent = userId;
+            document.getElementById('userAvatar').textContent = userName.charAt(0).toUpperCase();
+
+            // Load exam data with loading state
+            const nextBtn = document.getElementById('nextBtn');
+            const originalBtnText = nextBtn.innerHTML;
+            nextBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+            nextBtn.disabled = true;
+
+            try {
+                const response = await fetch(getScriptUrl(), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        action: 'getExam'
+                    })
+                });
+
+                const examData = await response.json();
+
+                if (examData.success) {
+                    initExam(examData.exam);
+                } else {
+                    alert('Failed to load exam: ' + (examData.message || 'Unknown error'));
+                    window.location.href = 'index.html';
+                }
+            } catch (error) {
+                console.error('Exam load error:', error);
+                alert('Network error. Please try again.');
+                window.location.href = 'index.html';
+            } finally {
+                nextBtn.innerHTML = originalBtnText;
+                nextBtn.disabled = false;
+            }
+
+            // Prevent accidental navigation away
+            window.addEventListener('beforeunload', function (e) {
+                if (Object.keys(userAnswers).length > 0) {
+                    e.preventDefault();
+                    e.returnValue = 'You have unsaved exam progress. Are you sure you want to leave?';
+                }
+            });
+        });
+
+        function initExam(examData) {
+            examQuestions = examData.questions;
+            examDuration = examData.duration || 45;
+            timeRemaining = examDuration * 60;
+
+            document.getElementById('totalQuestions').textContent = examQuestions.length;
+            startTimer(examDuration);
+            loadQuestion(currentQuestionIndex);
+
+            // Navigation buttons
+            document.getElementById('prevBtn').addEventListener('click', goToPreviousQuestion);
+            document.getElementById('nextBtn').addEventListener('click', goToNextQuestion);
+        }
+
+        function loadQuestion(index) {
+            if (index < 0 || index >= examQuestions.length) return;
+
+            const question = examQuestions[index];
+
+            // Update question number
+            document.getElementById('qNumber').textContent = index + 1;
+            document.getElementById('currentQuestion').textContent = index + 1;
+            document.getElementById('questionMarks').textContent = question.marks || 1;
+
+            // Update question text
+            document.getElementById('questionText').textContent = question.text;
+
+            // Update options
+            const optionsContainer = document.getElementById('optionsContainer');
+            optionsContainer.innerHTML = '';
+
+            question.options.forEach((option, i) => {
+                const optionId = String.fromCharCode(97 + i); // a, b, c, d
+                const optionElement = document.createElement('label');
+                optionElement.className = 'option';
+                optionElement.innerHTML = `
+                    <input type="radio" name="answer" value="${optionId}" 
+                        ${userAnswers[index] === optionId ? 'checked' : ''}>
+                    <span class="option-label"></span>
+                    <span class="option-text">${option}</span>
+                `;
+                optionsContainer.appendChild(optionElement);
+            });
+
+            // Update progress bar
+            const progressPercent = ((index + 1) / examQuestions.length) * 100;
+            document.getElementById('progressBar').style.width = `${progressPercent}%`;
+
+            // Update navigation buttons
+            document.getElementById('prevBtn').disabled = index === 0;
+            document.getElementById('nextBtn').textContent =
+                index === examQuestions.length - 1 ? 'Submit Exam' : 'Next Question';
+        }
+
+        function goToPreviousQuestion() {
+            if (currentQuestionIndex > 0) {
+                saveAnswer();
+                currentQuestionIndex--;
+                loadQuestion(currentQuestionIndex);
+            }
+        }
+
+        async function goToNextQuestion() {
+            saveAnswer();
+
+            if (currentQuestionIndex < examQuestions.length - 1) {
+                currentQuestionIndex++;
+                loadQuestion(currentQuestionIndex);
+            } else {
+                await submitExam();
+            }
+        }
+
+        function saveAnswer() {
+            const selectedOption = document.querySelector('input[name="answer"]:checked');
+            if (selectedOption) {
+                userAnswers[currentQuestionIndex] = selectedOption.value;
+            }
+        }
+
+        async function submitExam() {
+            const authToken = localStorage.getItem('authToken');
+            const userId = localStorage.getItem('userId');
+            
+            if (confirm('Are you sure you want to submit your exam? You cannot change answers after submission.')) {
+                const submitBtn = document.getElementById('nextBtn');
+                const originalBtnText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+                submitBtn.disabled = true;
+
+                try {
+                    const response = await fetch(getScriptUrl(), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        body: JSON.stringify({
+                            action: 'submitExam',
+                            userId: userId,
+                            answers: userAnswers,
+                            timeSpent: (examDuration * 60) - timeRemaining
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        clearInterval(timerInterval);
+                        alert(`Exam submitted successfully!\n\nYour score: ${result.score}%\nCorrect answers: ${result.correctAnswers}/${result.totalQuestions}\n\nYou will now be logged out.`);
+                        localStorage.removeItem('authToken');
+                        window.location.href = 'index.html';
+                    } else {
+                        alert('Submission failed: ' + (result.message || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Submission error:', error);
+                    alert('Network error during submission. Please try again.');
+                } finally {
+                    submitBtn.innerHTML = originalBtnText;
+                    submitBtn.disabled = false;
+                }
+            }
+        }
+
+        // Timer functionality
+        function startTimer(minutes) {
+            timeRemaining = minutes * 60;
+            updateTimerDisplay();
+
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                updateTimerDisplay();
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    submitExam();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(timeRemaining / 60);
+            const secs = timeRemaining % 60;
+
+            document.getElementById('examTimer').textContent =
+                `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+            if (timeRemaining <= 300) { // Last 5 minutes
+                document.querySelector('.timer').style.background =
+                    'linear-gradient(135deg, var(--danger), #d90429)';
+            }
+        }
+
+        function getScriptUrl() {
+            // Replace with your deployed web app URL
+            return 'https://script.google.com/macros/s/AKfycbwyoxMsAzH0ICzweGGMVM0bfH0170r6LNkkKlnqN_h_KAEuEM_DW8q7bCyG6_dvLVf92A/exec';
+        }
+    </script>
+</body>
+
+</html>
