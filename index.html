@@ -173,7 +173,7 @@
     </div>
 
     <script>
-        document.getElementById('loginForm').addEventListener('submit', async function (e) {
+      /*  document.getElementById('loginForm').addEventListener('submit', async function (e) {
             e.preventDefault();
 
             const email = document.getElementById('email').value;
@@ -232,7 +232,73 @@
         function getScriptUrl() {
             // Replace with your deployed web app URL
             return 'https://script.google.com/macros/s/AKfycbwyoxMsAzH0ICzweGGMVM0bfH0170r6LNkkKlnqN_h_KAEuEM_DW8q7bCyG6_dvLVf92A/exec';
+        }  */
+        document.getElementById('loginForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const errorElement = document.getElementById('loginError');
+    errorElement.textContent = '';
+    
+    // Show loading state
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const originalBtnText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+    submitBtn.disabled = true;
+
+    try {
+        // Use a proxy if needed (see Step 4 below)
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwyoxMsAzH0ICzweGGMVM0bfH0170r6LNkkKlnqN_h_KAEuEM_DW8q7bCyG6_dvLVf92A/exec';
+        
+        
+        // First make a GET request to trigger authorization
+        await fetch(`${SCRIPT_URL}?dummy=1`, {
+            method: 'GET',
+            redirect: 'follow'
+        });
+
+        // Then make the POST request
+        const response = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'login',
+                email: email,
+                password: password
+            }),
+            redirect: 'follow'
+        });
+
+        // Handle potential redirect
+        const result = await response.json();
+        
+        if (result.success) {
+            localStorage.setItem('authToken', result.token);
+            localStorage.setItem('userRole', result.role);
+            localStorage.setItem('userName', result.name);
+            localStorage.setItem('userId', result.userId);
+            
+            if (result.role === 'admin') {
+                window.location.href = 'admin.html';
+            } else {
+                window.location.href = 'exam.html';
+            }
+        } else {
+            errorElement.textContent = result.message || 'Invalid credentials';
         }
+    } catch (error) {
+        console.error('Login error:', error);
+        errorElement.textContent = 'Network error. Please try again later.';
+        // Additional error details for debugging:
+        errorElement.textContent += ` (${error.message})`;
+    } finally {
+        submitBtn.innerHTML = originalBtnText;
+        submitBtn.disabled = false;
+    }
+});
     </script>
 </body>
 
