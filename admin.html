@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Portal - Admin Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Your existing CSS styles remain unchanged */
+        /* ... (keep all your existing styles) ... */
+    </style>
+</head>
+
+<body>
+    <!-- Your existing HTML structure remains unchanged -->
+    <!-- ... (keep all your existing HTML) ... -->
+
+    <script>
+        // Google Apps Script Deployment ID
+        const BASE_URL = "https://script.google.com/macros/s/AKfycbwyoxMsAzH0ICzweGGMVM0bfH0170r6LNkkKlnqN_h_KAEuEM_DW8q7bCyG6_dvLVf92A/exec";
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Authentication check
+            const authToken = localStorage.getItem('authToken');
+            const userRole = localStorage.getItem('userRole');
+
+            if (!authToken || userRole !== 'admin') {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // Load admin name
+            const adminName = localStorage.getItem('userName') || 'Admin';
+            document.querySelector('.logo h1').textContent += ` - ${adminName}`;
+
+            // Tab navigation
+            document.querySelectorAll('.admin-nav li').forEach(tab => {
+                if (!tab.classList.contains('logout')) {
+                    tab.addEventListener('click', function () {
+                        document.querySelectorAll('.admin-nav li').forEach(t => t.classList.remove('active'));
+                        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+                        this.classList.add('active');
+                        const tabId = this.getAttribute('data-tab');
+                        document.getElementById(tabId).classList.add('active');
+
+                        loadTabContent(tabId);
+                    });
+                }
+            });
+
+            // Initialize modals
+            initQuestionModal();
+            initStudentModal();
+
+            // Load initial tab
+            loadTabContent('dashboard');
+
+            // Logout functionality
+            document.getElementById('logoutBtn').addEventListener('click', function () {
+                if (confirm('Are you sure you want to log out?')) {
+                    localStorage.clear();
+                    window.location.href = 'index.html';
+                }
+            });
+        });
+
+        function loadTabContent(tabId) {
+            switch (tabId) {
+                case 'dashboard':
+                    loadDashboardStats();
+                    break;
+                case 'questions':
+                    loadQuestions();
+                    break;
+                case 'students':
+                    loadStudents();
+                    break;
+                case 'settings':
+                    loadExamSettings();
+                    break;
+            }
+        }
+
+        async function fetchData(action, data = {}) {
+            try {
+                const response = await fetch(`${BASE_URL}?action=${action}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                return await response.json();
+            } catch (error) {
+                console.error(`Error in ${action}:`, error);
+                return { success: false, message: 'An error occurred' };
+            }
+        }
+
+        // Question Management Functions
+        function initQuestionModal() {
+            const modal = document.getElementById('questionModal');
+            const addBtn = document.getElementById('addQuestionBtn');
+            const form = document.getElementById('questionForm');
+
+            addBtn.addEventListener('click', function () {
+                document.getElementById('questionModalTitle').textContent = 'Add New Question';
+                form.reset();
+                form.querySelector('input[type="hidden"]').value = '';
+                modal.style.display = 'flex';
+            });
+
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+
+                const optionInputs = document.querySelectorAll('.option-text');
+                let allOptionsFilled = true;
+
+                optionInputs.forEach(input => {
+                    if (!input.value.trim()) {
+                        allOptionsFilled = false;
+                        input.style.borderColor = '#f72585';
+                    } else {
+                        input.style.borderColor = '';
+                    }
+                });
+
+                if (!allOptionsFilled) {
+                    alert('Please fill all four answer options');
+                    return;
+                }
+
+                if (!document.querySelector('input[name="correctOption"]:checked')) {
+                    alert('Please mark the correct answer');
+                    return;
+                }
+
+                const questionId = document.getElementById('questionId').value;
+                const questionData = {
+                    text: document.getElementById('questionText').value,
+                    options: [
+                        document.querySelector('.option-text[data-option="1"]').value,
+                        document.querySelector('.option-text[data-option="2"]').value,
+                        document.querySelector('.option-text[data-option="3"]').value,
+                        document.querySelector('.option-text[data-option="4"]').value
+                    ],
+                    correctAnswer: parseInt(document.querySelector('input[name="correctOption"]:checked').value)
+                };
+
+                const action = questionId ? 'updateQuestion' : 'addQuestion';
+                if (questionId) questionData.id = questionId;
+
+                // Show loading state
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+                submitBtn.disabled = true;
+
+                const response = await fetchData(action, questionData);
+
+                if (response.success) {
+                    alert(`Question ${questionId ? 'updated' : 'added'} successfully`);
+                    modal.style.display = 'none';
+                    loadQuestions();
+                } else {
+                    alert(response.message || 'Operation failed');
+                }
+
+                submitBtn.innerHTML = originalBtnText;
+                submitBtn.disabled = false;
+            });
+
+            document.querySelector('.close-modal').addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+        }
+
+        async function loadQuestions() {
+            const tbody = document.getElementById('questionsTable');
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i> Loading questions...</td></tr>';
+
+            const response = await fetchData('getAllQuestions');
+
+            if (response.success) {
+                tbody.innerHTML = '';
+
+                if (response.questions.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No questions found</td></tr>';
+                    return;
+                }
+
+                response.questions.forEach(question => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${question.id}</td>
+                        <td>${question.text.substring(0, 50)}${question.text.length > 50 ? '...' : ''}</td>
+                        <td>${question.options[question.correctAnswer - 1]}</td>
+                        <td>
+                            <button class="action-btn edit" data-id="${question.id}"><i class="fas fa-edit"></i></button>
+                            <button class="action-btn delete" data-id="${question.id}"><i class="fas fa-trash"></i></button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                document.querySelectorAll('.action-btn.edit').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        editQuestion(this.getAttribute('data-id'));
+                    });
+                });
+
+                document.querySelectorAll('.action-btn.delete').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        if (confirm('Are you sure you want to delete this question?')) {
+                            deleteQuestion(this.getAttribute('data-id'));
+                        }
+                    });
+                });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Failed to load questions</td></tr>';
+            }
+        }
+
+        async function editQuestion(id) {
+            const response = await fetchData('getQuestion', { id });
+
+            if (response.success) {
+                const question = response.question;
+                const modal = document.getElementById('questionModal');
+                const form = document.getElementById('questionForm');
+
+                document.getElementById('questionModalTitle').textContent = 'Edit Question';
+                document.getElementById('questionId').value = question.id;
+                document.getElementById('questionText').value = question.text;
+
+                question.options.forEach((option, index) => {
+                    document.querySelector(`.option-text[data-option="${index + 1}"]`).value = option;
+                });
+
+                document.querySelector(`input[name="correctOption"][value="${question.correctAnswer}"]`).checked = true;
+
+                modal.style.display = 'flex';
+            } else {
+                alert('Failed to load question');
+            }
+        }
+
+        async function deleteQuestion(id) {
+            if (confirm('Are you sure you want to delete this question? This action cannot be undone.')) {
+                const response = await fetchData('deleteQuestion', { id });
+
+                if (response.success) {
+                    alert('Question deleted successfully');
+                    loadQuestions();
+                } else {
+                    alert('Failed to delete question');
+                }
+            }
+        }
+
+        // Student Management Functions
+        function initStudentModal() {
+            const modal = document.getElementById('studentModal');
+            const addBtn = document.getElementById('addStudentBtn');
+            const form = document.getElementById('studentForm');
+
+            addBtn.addEventListener('click', function () {
+                document.getElementById('studentModalTitle').textContent = 'Add New Student';
+                form.reset();
+                form.querySelector('input[type="hidden"]').value = '';
+                modal.style.display = 'flex';
+            });
+
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+
+                const studentId = document.getElementById('studentModalId').value;
+                const studentData = {
+                    name: document.getElementById('studentName').value,
+                    email: document.getElementById('studentEmail').value,
+                    password: document.getElementById('studentPassword').value
+                };
+
+                const action = studentId ? 'updateStudent' : 'addStudent';
+                if (studentId) studentData.id = studentId;
+
+                // Show loading state
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+                submitBtn.disabled = true;
+
+                const response = await fetchData(action, studentData);
+
+                if (response.success) {
+                    alert(`Student ${studentId ? 'updated' : 'added'} successfully`);
+                    modal.style.display = 'none';
+                    loadStudents();
+                } else {
+                    alert(response.message || 'Operation failed');
+                }
+
+                submitBtn.innerHTML = originalBtnText;
+                submitBtn.disabled = false;
+            });
+
+            document.querySelectorAll('.close-modal').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    this.closest('.modal').style.display = 'none';
+                });
+            });
+        }
+
+        async function loadStudents() {
+            const tbody = document.getElementById('studentsTable');
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i> Loading students...</td></tr>';
+
+            const response = await fetchData('getAllStudents');
+
+            if (response.success) {
+                tbody.innerHTML = '';
+
+                if (response.students.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No students found</td></tr>';
+                    return;
+                }
+
+                response.students.forEach(student => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${student.id}</td>
+                        <td>${student.name}</td>
+                        <td>${student.email}</td>
+                        <td>
+                            <button class="action-btn edit" data-id="${student.id}"><i class="fas fa-edit"></i></button>
+                            <button class="action-btn delete" data-id="${student.id}"><i class="fas fa-trash"></i></button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                document.querySelectorAll('.action-btn.edit').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        editStudent(this.getAttribute('data-id'));
+                    });
+                });
+
+                document.querySelectorAll('.action-btn.delete').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        if (confirm('Are you sure you want to delete this student?')) {
+                            deleteStudent(this.getAttribute('data-id'));
+                        }
+                    });
+                });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Failed to load students</td></tr>';
+            }
+        }
+
+        async function editStudent(id) {
+            const response = await fetchData('getStudent', { id });
+
+            if (response.success) {
+                const student = response.student;
+                const modal = document.getElementById('studentModal');
+                const form = document.getElementById('studentForm');
+
+                document.getElementById('studentModalTitle').textContent = 'Edit Student';
+                document.getElementById('studentModalId').value = student.id;
+                document.getElementById('studentName').value = student.name;
+                document.getElementById('studentEmail').value = student.email;
+                document.getElementById('studentPassword').placeholder = 'Leave blank to keep current password';
+
+                modal.style.display = 'flex';
+            } else {
+                alert('Failed to load student');
+            }
+        }
+
+        async function deleteStudent(id) {
+            if (confirm('Are you sure you want to delete this student? All their exam results will also be deleted.')) {
+                const response = await fetchData('deleteStudent', { id });
+
+                if (response.success) {
+                    alert('Student deleted successfully');
+                    loadStudents();
+                } else {
+                    alert('Failed to delete student');
+                }
+            }
+        }
+
+        // Dashboard Functions
+        async function loadDashboardStats() {
+            const response = await fetchData('getAdminStats');
+
+            if (response.success) {
+                document.getElementById('totalStudents').textContent = response.totalStudents || 0;
+                document.getElementById('totalQuestions').textContent = response.totalQuestions || 0;
+            } else {
+                alert('Failed to load dashboard stats');
+            }
+        }
+
+        // Settings Functions
+        async function loadExamSettings() {
+            const response = await fetchData('getExamSettings');
+
+            if (response.success) {
+                document.getElementById('examDuration').value = response.duration || 30;
+                document.getElementById('passingScore').value = response.passingScore || 60;
+
+                document.getElementById('examSettingsForm').addEventListener('submit', async function (e) {
+                    e.preventDefault();
+
+                    const settings = {
+                        duration: parseInt(document.getElementById('examDuration').value),
+                        passingScore: parseInt(document.getElementById('passingScore').value)
+                    };
+
+                    const submitBtn = e.target.querySelector('button[type="submit"]');
+                    const originalBtnText = submitBtn.innerHTML;
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+                    submitBtn.disabled = true;
+
+                    const saveResponse = await fetchData('saveExamSettings', settings);
+
+                    if (saveResponse.success) {
+                        alert('Settings saved successfully');
+                    } else {
+                        alert('Failed to save settings');
+                    }
+
+                    submitBtn.innerHTML = originalBtnText;
+                    submitBtn.disabled = false;
+                });
+            } else {
+                alert('Failed to load exam settings');
+            }
+        }
+
+        // Close modals when clicking outside
+        window.addEventListener('click', function (event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+
+</html>
