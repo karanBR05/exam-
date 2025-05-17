@@ -171,28 +171,36 @@
             </form>
         </div>
     </div>
+    <!-- YOUR EXISTING HTML/CSS (NO CHANGES) -->
+
 
     <script>
-      /*  document.getElementById('loginForm').addEventListener('submit', async function (e) {
+        document.getElementById('loginForm').addEventListener('submit', async function (e) {
             e.preventDefault();
 
-            const email = document.getElementById('email').value;
+            const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
             const errorElement = document.getElementById('loginError');
-            errorElement.textContent = '';
-
-            // Show loading state
             const submitBtn = e.target.querySelector('button[type="submit"]');
+
+            // Clear previous errors and show loading state
+            errorElement.textContent = '';
+            submitBtn.disabled = true;
             const originalBtnText = submitBtn.innerHTML;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
-            submitBtn.disabled = true;
 
             try {
+                // First make a dummy request to trigger Google authorization
+                await fetch(getScriptUrl(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'auth-check' })
+                });
+
+                // Main login request
                 const response = await fetch(getScriptUrl(), {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         action: 'login',
                         email: email,
@@ -203,92 +211,54 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    // Store user data in localStorage
+                    // Store session data
                     localStorage.setItem('authToken', result.token);
                     localStorage.setItem('userRole', result.role);
-                    localStorage.setItem('userName', result.name);
-                    localStorage.setItem('userId', result.userId);
+                    localStorage.setItem('userName', result.name || 'User');
+                    localStorage.setItem('userId', result.userId || '');
 
-                    // Redirect based on role
-                    if (result.role === 'admin') {
-                        window.location.href = 'admin.html';
-                    } else {
-                        window.location.href = 'exam.html';
-                    }
+                    // Redirect with slight delay for better UX
+                    setTimeout(() => {
+                        window.location.href = result.role === 'admin' ? 'admin.html' : 'exam.html';
+                    }, 300);
                 } else {
                     errorElement.textContent = result.message || 'Invalid email or password';
+                    document.getElementById('password').value = '';
+                    document.getElementById('password').focus();
                 }
             } catch (error) {
                 console.error('Login error:', error);
-                errorElement.textContent = 'Network error. Please try again.';
+                errorElement.textContent = 'Connection failed. Please try again.';
+
+                // More detailed error for debugging (remove in production)
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    console.log('Detailed error:', error);
+                    errorElement.textContent += ` (${error.message})`;
+                }
             } finally {
-                // Restore button state
-                submitBtn.innerHTML = originalBtnText;
                 submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
             }
         });
 
-        // Helper function to get the Google Apps Script URL
+        // Helper function - Update with your actual deployment URL
         function getScriptUrl() {
-            // Replace with your deployed web app URL
-            return 'https://script.google.com/macros/s/AKfycbwyoxMsAzH0ICzweGGMVM0bfH0170r6LNkkKlnqN_h_KAEuEM_DW8q7bCyG6_dvLVf92A/exec';
-        }  */
-     // PASTE YOUR DEPLOYED APPS SCRIPT URL HERE (replace the example)
-const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwtPxqn2if1-TquV0Q9sFUoWkt8TN07J0c79uBdVO-FeB80Y4TCx6Pq0WxWLF8CbBhwGQ/exec";
+            // Replace with your EXACT deployed web app URL
+            return 'https://script.google.com/macros/s/AKfycby704No0UVkTMaxKpV65zF0HXfmEUUVVJEZWzsvniTAW3RmIYnQrpoxXzKgHLy9oFBm/exec';
 
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  
-  const email = document.getElementById('email').value;
-  const password = document.getElementById('password').value;
-  const errorElement = document.getElementById('loginError');
-  const submitBtn = e.target.querySelector('button[type="submit"]');
+            // For local testing with CORS issues, you can temporarily use:
+            // return 'https://cors-anywhere.herokuapp.com/https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
+        }
 
-  // Show loading state
-  submitBtn.disabled = true;
-  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+        // Auto-focus email field on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('email').focus();
 
-  try {
-    // Step 1: First make a GET request to trigger authorization
-    await fetch(`${APP_SCRIPT_URL}?dummy=1`, { 
-      method: 'GET',
-      redirect: 'follow'
-    });
-
-    // Step 2: Make the actual login request
-    const response = await fetch(APP_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'login',
-        email: email,
-        password: password
-      }),
-      redirect: 'follow'
-    });
-
-    const result = await response.json();
-
-    if (result.success) {
-      // Store user data
-      localStorage.setItem('authToken', result.token);
-      localStorage.setItem('userRole', result.role);
-      localStorage.setItem('userName', result.name || 'User');
-      
-      // Redirect
-      window.location.href = result.role === 'admin' ? 'admin.html' : 'exam.html';
-    } else {
-      errorElement.textContent = result.message || 'Login failed';
-    }
-  } catch (error) {
-    console.error('Login error:', error);
-    errorElement.textContent = 'Network error. Please try again.';
-  } finally {
-    // Restore button
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = 'Login';
-  }
-});
+            // Clear any old session data when returning to login
+            if (window.performance && performance.navigation.type === 1) {
+                localStorage.removeItem('authToken');
+            }
+        });
     </script>
 </body>
 
